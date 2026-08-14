@@ -1,5 +1,7 @@
 # Job Queue API
 
+🔗 **Demo ao vivo:** https://job-queue-api-wcex.onrender.com/
+
 API em FastAPI para registrar jobs em PostgreSQL e processá-los por meio de um worker em Python. O fluxo principal é:
 
 - a API recebe um payload e salva um registro em `jobs`;
@@ -24,7 +26,9 @@ API em FastAPI para registrar jobs em PostgreSQL e processá-los por meio de um 
 - `app/database.py`: conexão com PostgreSQL usando variáveis de ambiente;
 - `worker.py`: processo que processa jobs pendentes;
 - `sql/create_tables.sql`: schema inicial do banco;
-- `docker-compose.yml`: orquestração do PostgreSQL, API e worker;
+- `entrypoint.py`: processo supervisor que inicia a API e o worker juntos no mesmo container (usado em produção/deploy);
+- `worker.py`: processo que processa jobs pendentes;
+- `docker-compose.yml`: orquestração do PostgreSQL e da API (worker embutido via entrypoint.py);
 - `Dockerfile`: imagem da aplicação.
 
 ## Requisitos
@@ -58,8 +62,7 @@ docker compose up --build
 Esse comando sobe os serviços:
 
 - `db`: PostgreSQL com inicialização automática do schema em `sql/create_tables.sql`;
-- `api`: aplicação FastAPI;
-- `worker`: processo que processa jobs pendentes.
+- `api`: aplicação FastAPI, que também inicia o worker internamente via `entrypoint.py`.
 
 ### URLs úteis
 
