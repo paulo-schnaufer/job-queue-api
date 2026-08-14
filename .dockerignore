@@ -1,0 +1,42 @@
+# Git metadata
+.git
+.gitignore
+
+# Python virtual env and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment files
+.env
+.env.*
+
+# Local tooling and editor metadata
+.vscode/
+.idea/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+tempCodeRunnerFile.py
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# If you ever create local DB volume data in the repo root
+postgres_data/
+
+# Keep Docker-related files and source code
+!Dockerfile
+!requirements.txt
+!app/
+!sql/
+!worker.py
