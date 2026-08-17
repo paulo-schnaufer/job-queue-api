@@ -1,120 +1,139 @@
-import json
 import psycopg2
-from datetime import datetime
-from typing import Any
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, status, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from psycopg2.extras import Json
+
+from ..auth import get_current_client
 from ..database import get_connection
+from ..schemas.jobs import JobCreate, JobCreated, JobResponse
+
+DEFAULT_JOB_LIMIT = 20
+MAX_JOB_LIMIT = 100
+
+INTERNAL_SERVER_ERROR = "Internal server error."
+JOB_NOT_FOUND_ERROR = "Job not found."
+JOB_CREATE_FAILED_ERROR = "Failed to create job."
+CLIENT_NOT_FOUND_ERROR = "Client not found."
 
 router = APIRouter(
     prefix="/jobs",
     tags=["jobs"],
 )
 
-class JobCreate(BaseModel):
-    client_id: int
-    payload: dict[str, Any]
 
-class JobCreated(BaseModel):
-    job_id: int
-    status: str
+def _get_connection_or_500():
+    try:
+        return get_connection()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=INTERNAL_SERVER_ERROR,
+        ) from exc
 
-class JobOut(BaseModel):
-    id: int
-    client_id: int
-    status: str
-    payload: dict[str, Any]
-    result: str | None = None
-    created_at: datetime
-    updated_at: datetime | None = None
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=JobCreated)
-def create_job(job: JobCreate):
+def _row_to_job(row):
+    return JobResponse(
+        id=row[0],
+        client_id=row[1],
+        status=row[2],
+        payload=row[3],
+        result=row[4],
+        created_at=row[5],
+        updated_at=row[6],
+    )
+
+
+@router.post(
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=JobCreated,
+)
+def create_job(
+    job: JobCreate,
+    current_client_id: int = Depends(get_current_client),
+):
     sql = """
         INSERT INTO jobs (client_id, payload)
         VALUES (%s, %s)
         RETURNING id;
     """
-    try:
-        conn = get_connection()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+
+    conn = _get_connection_or_500()
 
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute(sql, (job.client_id, Json(job.payload)))
-                (job_id,) = cursor.fetchone()
+                cursor.execute(sql, (current_client_id, Json(job.payload)))
+
+                row = cursor.fetchone()
+                if row is None:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=JOB_CREATE_FAILED_ERROR,
+                    )
+
+                (job_id,) = row
+
             return JobCreated(job_id=job_id, status="pending")
-    except psycopg2.errors.ForeignKeyViolation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Client {job.client_id} não encontrado.",
-        )
+
     finally:
         conn.close()
 
 @router.get("/{job_id}")
-def get_job(job_id: int):
+def get_job(
+    job_id: int,
+    current_client_id: int = Depends(get_current_client),
+):
     sql = """
         SELECT id, client_id, status, payload, result, created_at, updated_at
         FROM jobs
-        WHERE id = %s
+        WHERE id = %s AND client_id = %s
     """
-    try:
-        conn = get_connection()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+
+    conn = _get_connection_or_500()
 
     try:
         with conn:
             with conn.cursor() as cursor:
-                cursor.execute(sql, (job_id,))
+                cursor.execute(sql, (job_id, current_client_id,))
                 row = cursor.fetchone()
-                if row is None:
-                    raise HTTPException(status_code=404, detail="Job não encontrado.")
-                (
-                    job_id,
-                    job_client_id,
-                    job_status,
-                    job_payload,
-                    job_result,
-                    job_created_at,
-                    job_updated_at,
-                ) = row
 
-            return JobOut(
-                id=job_id,
-                client_id=job_client_id,
-                status=job_status,
-                payload=job_payload,
-                result=job_result,
-                created_at=job_created_at,
-                updated_at=job_updated_at,
-            )
+                if row is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=JOB_NOT_FOUND_ERROR,
+                    )
+
+            return _row_to_job(row)
     finally:
         conn.close()
 
-@router.get("/", response_model=list[JobOut])
-def list_jobs(status: str | None = None, limit: int = Query(20, ge=1, le=100)):
+@router.get("/", response_model=list[JobResponse])
+def list_jobs(
+    status_filter: str | None = Query(None, alias="status"),
+    limit: int = Query(DEFAULT_JOB_LIMIT, ge=1, le=MAX_JOB_LIMIT),
+    current_client_id: int = Depends(get_current_client),
+):
     sql = """
-        SELECT id, client_id, status, payload, result, created_at, updated_at
+        SELECT id,
+               client_id,
+               status,
+               payload,
+               result,
+               created_at,
+               updated_at
         FROM jobs
+        WHERE client_id = %s
     """
-    params = []
+    params: list[object] = [current_client_id]
 
-    if status is not None:
-        sql += " WHERE status = %s"
-        params.append(status)
+    if status_filter is not None:
+        sql += " AND status = %s"
+        params.append(status_filter)
 
     sql += " ORDER BY created_at DESC LIMIT %s"
     params.append(limit)
 
-    try:
-        conn = get_connection()
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error.")
+    conn = _get_connection_or_500()
 
     try:
         with conn:
@@ -122,21 +141,6 @@ def list_jobs(status: str | None = None, limit: int = Query(20, ge=1, le=100)):
                 cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
 
-                jobs = []
-                for row in rows:
-                    job_payload = row[3]
-
-                    jobs.append(
-                        JobOut(
-                            id=row[0],
-                            client_id=row[1],
-                            status=row[2],
-                            payload=job_payload,
-                            result=row[4],
-                            created_at=row[5],
-                            updated_at=row[6],
-                        )
-                    )
-                return jobs
+                return [_row_to_job(row) for row in rows]
     finally:
         conn.close()

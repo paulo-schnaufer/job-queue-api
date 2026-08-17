@@ -135,7 +135,8 @@ curl http://localhost:8000/health/
 ```bash
 curl -X POST http://localhost:8000/jobs/ \
   -H "Content-Type: application/json" \
-  -d '{"client_id": 1, "payload": {"teste": true, "valor": 123}}'
+  -H "x-api-key: MINHA_API_KEY" \
+  -d '{"payload": {"teste": true, "valor": 123}}'
 ```
 
 ### Consultar um job por ID
@@ -150,13 +151,17 @@ curl http://localhost:8000/jobs/1
 curl "http://localhost:8000/jobs/?status=pending&limit=10"
 ```
 
-## Fluxo de processamento
+## Fluxo de autenticação e processamento
 
-1. A API registra um job com status `pending`.
-2. O worker seleciona até um job pendente.
-3. O registro recebe `running`.
-4. O processamento realiza a lógica do job.
-5. O registro finaliza como `done` ou `failed`.
+1. O cliente envia a `x-api-key` no header.
+2. A dependency `get_current_client` valida a chave contra `clients.api_key`.
+3. A rota usa o `client_id` autenticado para registrar o job.
+4. O worker seleciona jobs pendentes.
+5. O registro recebe `running`.
+6. O processamento realiza a lógica do job.
+7. O registro finaliza como `done` ou `failed`.
+
+Isso evita que qualquer cliente envie um `client_id` arbitrário no body e crie jobs em nome de outro cliente.
 
 ## Observações
 
