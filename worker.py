@@ -90,6 +90,7 @@ def main_cycle():
                     conn.commit()
                 except Exception as e:
                     mark_failed(cursor, conn, job_id, e)
+                    continue
 
                 try:
                     time.sleep(1)
