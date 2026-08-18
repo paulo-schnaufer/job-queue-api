@@ -1,45 +1,46 @@
 # Job Queue API
 
-🔗 **Demo ao vivo:** https://job-queue-api-wcex.onrender.com/
+🌐 **Languages:** English | [Português](README.pt.md)
 
-API em FastAPI para registrar jobs em PostgreSQL e processá-los por meio de um worker em Python. O fluxo principal é:
+🔗 **Live demo:** https://job-queue-api-wcex.onrender.com/
 
-- a API recebe um payload e salva um registro em `jobs`;
-- o worker consulta jobs em status `pending`;
-- o worker atualiza o status para `running` e depois para `done` ou `failed`;
-- a API permite consultar o histórico e o resultado final de cada job.
+FastAPI API for registering jobs in PostgreSQL and processing them through a Python worker. The main flow is:
 
-## Funcionalidades
+- the API receives a payload and saves a record in `jobs`;
+- the worker queries jobs in `pending` status;
+- the worker updates the status to `running` and then to `done` or `failed`;
+- the API allows checking the history and the final result of each job.
 
-- Criação de jobs via REST API;
-- Consulta individual por ID;
-- Listagem com filtro por status e limite;
-- Worker assíncrono em loop para processar fila;
-- Banco PostgreSQL em container via Docker Compose;
-- Ambiente pronto para rodar com `docker compose up --build`.
+## Features
 
-## Estrutura do projeto
+- Creating jobs via REST API;
+- Individual lookup by ID;
+- Listing with filtering by status and limit;
+- Asynchronous worker loop to process the queue;
+- PostgreSQL database in a container via Docker Compose;
+- Ready-to-run environment with `docker compose up --build`.
 
-- `app/main.py`: inicializa a aplicação FastAPI;
-- `app/routers/health.py`: healthcheck da API;
-- `app/routers/jobs.py`: endpoints de criação, consulta e listagem de jobs;
-- `app/database.py`: conexão com PostgreSQL usando variáveis de ambiente;
-- `worker.py`: processo que processa jobs pendentes;
-- `sql/create_tables.sql`: schema inicial do banco;
-- `entrypoint.py`: processo supervisor que inicia a API e o worker juntos no mesmo container (usado em produção/deploy);
-- `worker.py`: processo que processa jobs pendentes;
-- `docker-compose.yml`: orquestração do PostgreSQL e da API (worker embutido via entrypoint.py);
-- `Dockerfile`: imagem da aplicação.
+## Project structure
 
-## Requisitos
+- `app/main.py`: initializes the FastAPI application;
+- `app/routers/health.py`: API healthcheck;
+- `app/routers/jobs.py`: endpoints for creating, querying, and listing jobs;
+- `app/database.py`: PostgreSQL connection using environment variables;
+- `worker.py`: process that handles pending jobs;
+- `sql/create_tables.sql`: initial database schema;
+- `entrypoint.py`: supervisor process that starts the API and worker together in the same container (used in production/deployment);
+- `docker-compose.yml`: orchestration for PostgreSQL and the API (worker embedded via `entrypoint.py`);
+- `Dockerfile`: application image.
+
+## Requirements
 
 - Docker
 - Docker Compose
-- Python 3.11+ para execução local (opcional)
+- Python 3.11+ for local execution (optional)
 
-## Configuração do ambiente
+## Environment configuration
 
-Crie um arquivo `.env` na raiz do projeto com as variáveis abaixo:
+Create a `.env` file in the project root with the variables below:
 
 ```env
 DB_HOST=localhost
@@ -49,68 +50,70 @@ DB_USER=postgres
 DB_PASSWORD=1234
 ```
 
-Essas variáveis são usadas tanto pela API quanto pelo worker. O PostgreSQL expõe a porta `5433` no host local para evitar conflitos com outras instâncias locais.
+These variables are used by both the API and the worker. PostgreSQL exposes port `5433` on the host machine to avoid conflicts with other local instances.
 
-## Executar com Docker Compose
+## Running with Docker Compose
 
-Na raiz do projeto, rode:
+From the project root, run:
 
 ```bash
 docker compose up --build
 ```
 
-Esse comando sobe os serviços:
+This command starts the services:
 
-- `db`: PostgreSQL com inicialização automática do schema em `sql/create_tables.sql`;
-- `api`: aplicação FastAPI, que também inicia o worker internamente via `entrypoint.py`.
+- `db`: PostgreSQL with automatic schema initialization from `sql/create_tables.sql`;
+- `api`: FastAPI application, which also starts the worker internally via `entrypoint.py`.
 
-### URLs úteis
+**Important:** Before testing the endpoints, an API key must be inserted into the database. See the detailed instructions in the **Authentication flow** section below.
+
+### Useful URLs
 
 - API: http://localhost:8000
 - Healthcheck: http://localhost:8000/health/
 - PostgreSQL: localhost:5433
 
-Para parar tudo:
+To stop everything:
 
 ```bash
 docker compose down
 ```
 
-Se quiser remover também o volume do banco:
+If you also want to remove the database volume:
 
 ```bash
 docker compose down -v
 ```
 
-## Executar localmente (sem Docker)
+## Running locally (without Docker)
 
-Crie e ative o ambiente virtual:
+Create and activate the virtual environment:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-No Windows PowerShell:
+In Windows PowerShell:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Instale as dependências:
+Install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Inicie a API:
+Start the API:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Em outro terminal, inicie o worker:
+In another terminal, start the worker:
 
 ```bash
 python worker.py
@@ -120,8 +123,10 @@ python worker.py
 
 ### Root
 
+The root endpoint redirects to the Swagger docs at `/docs`.
+
 ```bash
-curl http://localhost:8000/
+curl -L http://localhost:8000/
 ```
 
 ### Healthcheck
@@ -130,7 +135,7 @@ curl http://localhost:8000/
 curl http://localhost:8000/health/
 ```
 
-### Criar job
+### Create job
 
 ```bash
 curl -X POST http://localhost:8000/jobs/ \
@@ -139,32 +144,50 @@ curl -X POST http://localhost:8000/jobs/ \
   -d '{"payload": {"teste": true, "valor": 123}}'
 ```
 
-### Consultar um job por ID
+Expected response from FastAPI:
+
+```json
+{
+  "job_id": 1,
+  "status": "pending"
+}
+```
+
+### Get a job by ID
 
 ```bash
 curl http://localhost:8000/jobs/1
 ```
 
-### Listar jobs
+### List jobs
 
 ```bash
 curl "http://localhost:8000/jobs/?status=pending&limit=10"
 ```
 
-## Fluxo de autenticação e processamento
+## Authentication and processing flow
 
-1. O cliente envia a `x-api-key` no header.
-2. A dependency `get_current_client` valida a chave contra `clients.api_key`.
-3. A rota usa o `client_id` autenticado para registrar o job.
-4. O worker seleciona jobs pendentes.
-5. O registro recebe `running`.
-6. O processamento realiza a lógica do job.
-7. O registro finaliza como `done` ou `failed`.
+1. The client sends the `x-api-key` in the header.
+2. The `get_current_client` dependency validates the key against `clients.api_key`.
+3. The route uses the authenticated `client_id` to register the job.
+4. The worker selects pending jobs.
+5. The record is set to `running`.
+6. The processing executes the job logic.
+7. The record ends as `done` or `failed`.
 
-Isso evita que qualquer cliente envie um `client_id` arbitrário no body e crie jobs em nome de outro cliente.
+This prevents any client from sending an arbitrary `client_id` in the body and creating jobs on behalf of another client.
 
-## Observações
+Before calling protected endpoints, make sure the `clients` table contains at least one client row with a valid API key, for example:
 
-- O projeto não usa RabbitMQ, Celery ou outra fila externa; a fila é implementada em PostgreSQL.
-- O worker faz polling no banco em looping e processa os jobs disponíveis.
-- O arquivo `sql/create_tables.sql` é montado no container do PostgreSQL e executado automaticamente na inicialização.
+```sql
+INSERT INTO clients (name, api_key, rpm_limit)
+VALUES ('demo', 'MINHA_API_KEY', 1000);
+```
+
+Without this, requests will return `401` because the authentication dependency checks `clients.api_key` before creating a job.
+
+## Notes
+
+- The project does not use RabbitMQ, Celery, or any other external queue; the queue is implemented in PostgreSQL.
+- The worker polls the database in a loop and processes the available jobs.
+- The `sql/create_tables.sql` file is mounted in the PostgreSQL container and executed automatically on startup.
